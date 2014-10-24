@@ -1,0 +1,88 @@
+---
+title: "Course Project"
+author: "Peggy Fan"
+date: "October 24, 2014"
+---
+
+#### Synopsis
+This data include 6 participants' performances of one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions. The goal is to use the data to predict the type of movement a participant does, coded by the "classe" variable that includes five responses: A, B, C, D, E, & F.
+
+Class A: Exactly according to the specification
+Class B: Throwing the elbows to the front
+Class C: Lifting the dumbbell only halfway
+Class D: Lowering the dumbbell only halfway
+Class E: Throwing the hips to the front
+
+```{r, echo=FALSE, comment=NULL, results='hide', message=FALSE}
+setwd("/Users/peggyfan/Downloads/R_data/Practical_machine_learning")
+library(caret)
+library(randomForest)
+```
+
+#### Variable Selection
+A quick look at the data revealed that many variables have "NA"s, which are not reliable for prediction. I also excluded variables that are not relevant to the prediction, which are: "X", "name", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window"
+
+Finally, I converted all values in the data into numeric for the modeling, except for the outcome "classe" variable, which is set to a factor.
+
+```{r, echo=TRUE, comment=NULL, results='hide'}
+training_original <- read.csv("./pml-training.csv")
+testing_original <- read.csv("./pml-testing.csv")
+
+training1 <- as.data.frame(sapply(training_original, function(f){is.na(f)<-which(f == '');f}))
+training1 <- subset(training1, select=colMeans(is.na(training1)) == 0) 
+testing1 <- subset(testing_original, select=colMeans(is.na(testing_original)) == 0) 
+
+training1 <- as.data.frame(sapply(training1[, -c(1:7)], as.numeric))
+testing1 <- as.data.frame(sapply(testing1[, -c(1:7)], as.numeric))
+training1$classe <- as.factor(training1$classe)
+
+```
+
+#### Cross-Validation
+I then split the training data for cross validation.
+
+```{r, echo=TRUE, comment=NULL}
+testIndex = createDataPartition(training_original$classe, p = 0.7, list=F)
+train = training1[testIndex,]
+test = training1[-testIndex,]
+
+train$classe <- as.factor(train$classe)
+test$classe <- as.factor(test$classe)
+```
+
+#### Modeling
+After selecting the variables, the dataset still have about 53 predictors. I decided to use Random Forest and Boosting (Generalized Boosted Regression Models) because they tend to provide the highest accuracy and handle a large number of predictors well.
+
+```{r, echo=TRUE, comment=NULL, results='hide', message=FALSE}
+rf <- train(train$classe ~., method="rf", data=train, 
+            trControl = trainControl(method = "oob"))
+
+gbm <- train(train$classe ~., method="gbm", data=train, 
+            trControl = trainControl(method = "cv", number=5))
+```
+
+I applied both models to the subset of training data for cross validation. Then I extracted the accuracy rate using the Confusion Matrix and compiled them into a table:
+
+```{r, echo=TRUE, comment=NULL}
+rf_matrix <- confusionMatrix(test$classe, predict(rf, test))
+gbm_matrix <- confusionMatrix(test$classe, predict(gbm, test))
+
+```
+
+```{r, echo=FALSE, comment=NULL}
+acc.tab <- data.frame(Model=c("Random Forest", "GBM"),
+                      Accuracy=c(rf_matrix$overall[1], gbm_matrix$overall[1]))
+acc.tab
+```
+
+Random Forest has the higher accuracy rate, so I decided to use this model for predicting the test dataset of 20 observations.
+
+#### Prediction 
+
+To predict the outcome for the 20 cases in the test data set, I used the Random Forest model:
+
+```{r, echo=TRUE}
+x <- as.character(predict(rf, testing1))
+```
+
+The result was the submitted to the course website.
